@@ -1,0 +1,5 @@
+from tensorlake.applications import run_remote_application, Request
+
+## Ingest SEC Filings
+sec_filings = ['https://pub-226479de18b2493f96b64c6674705dd8.r2.dev/goog-10q-june-25.pdf', 'https://pub-226479de18b2493f96b64c6674705dd8.r2.dev/goog-10q-march-25.pdf', 'https://pub-226479de18b2493f96b64c6674705dd8.r2.dev/goog-10k-december-24.pdf', 'https://pub-226479de18b2493f96b64c6674705dd8.r2.dev/msft-10k-june-25.pdf', 'https://pub-226479de18b2493f96b64c6674705dd8.r2.dev/msft-10q-march-25.pdf', 'https://pub-226479de18b2493f96b64c6674705dd8.r2.dev/msft-10q-december-24.pdf', 'https://pub-226479de18b2493f96b64c6674705dd8.r2.dev/meta-10q-june-25.pdf', 'https://pub-226479de18b2493f96b64c6674705dd8.r2.dev/meta-10q-march-25.pdf', 'https://pub-226479de18b2493f96b64c6674705dd8.r2.dev/meta-10k-december-24.pdf']
+request: Request = run_remote_application('document_ingestion', sec_filings)
