@@ -16,7 +16,7 @@ image = (
 @function(
     image=image
 )
-def query_sec(query_choice) -> str:
+def query_sec(query_choice: str) -> str:
     # Risk category distribution - Default Query
     query = """
         SELECT 
