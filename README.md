@@ -11,23 +11,23 @@
 
 ## Transform Unstructured Data into Queryable and AI Ready Data on Databricks
 
-Tensorlake is a serverless platform for building data applications and agents in Python that can ingest and transform unstructured data before landing them in Databricks Data Intelligence Platform. This is an alternative to perform ETL orchestration with SQL expressions and UDF functions. 
+[Databricks](https://www.databricks.com/) is a unified data analytics platform built on Apache Spark, designed for data engineering, machine learning, and analytics at scale. When combined with Tensorlake's document parsing and serverless agentic application runtime, you can build AI workflows and agents which can automate processing of documents and other forms of unstructured data and land them in Databricks.
 
-Tensorlake's applications automatically behave like durable queues so you wouldn't need to setup Kafka or other queues to manage ingestion. The clusters automatically scale up as data is ingested to process them.
+This repository demonstrates building a full ingestion pipeline on Tensorlake. The orchestration of your ingestion pipeline happens on Tensorlake, so you can write a distributed and durable ingestion pipeline in pure Python and Tensorlake will automatically queue requests as they arrive and scale the cluster to process data. The platform is serverless, so you only pay for compute resources used for processing data.
 
 ## Table of Contents
-- [Example Use Cases](#use-cases)
-  - [SEC Filings Analysis Pipeline](#blueprint-sec-filings-analysis-pipeline)
-  - [Document Indexing](#blueprint-document-indexing) (*coming soon*)
+- [SEC Filings Analysis Pipeline](#sec-filings-analysis-pipeline)
+- [Quick Start](#quick-start)
+- [Local Testing](#local-testing)
+- [Deploying to Tensorlake Cloud](#deploying-to-tensorlake-cloud)
+- [Example Queries](#example-queries)
 - [Quick Overview: Tensorlake Applications](#quick-overview-tensorlake-applications)
 - [Why This Integration Matters](#why-this-integration-matters)
 - [Resources](#resources)
 
-## Use Cases
+## SEC Filings Analysis Pipeline
 
-We present some blueprints for production ready patterns to integrate with Databricks and code that you can deploy under 2 minutes and experience the integration.
-
-### Blueprint: SEC Filings Analysis Pipeline
+This repository demonstrates how to use Tensorlake Applications to extract AI-related risk mentions from SEC filings, storing and querying results in Databricks.
 
 The Tensorlake Application receives Document URLs over HTTP, uses Vision Language Models to classify pages containing risk factors, calls an LLM for structured extraction from only relevant pages, and then uses Databricks SQL Connector to write structured data into your Databricks SQL Warehouse. Once it's inside Databricks you can run complex analytics to track trends, compare companies, and discover emerging risk patterns.
 
@@ -42,11 +42,140 @@ Tensorlake automatically queues requests and scales out the cluster, there is no
 - **Dual Table Design**: Summary table for aggregations, detailed table for deep analysis
 - **Pre-built Queries**: 6 analytics queries for risk distribution, trends, and company comparisons
 
-Try out the [code here](./sec-filings).
+## Architecture
 
-### Blueprint: Document Indexing
+```
+Document URLs → Tensorlake Application → Page Classification (VLM)
+                                      → Structured Extraction (LLM)
+                                      → Databricks SQL Warehouse
+                                      → SQL Analytics & Dashboards
+```
 
-*Coming soon* - Build a RAG-ready document knowledge base by extracting text chunks with embeddings and storing them in Databricks for semantic search and retrieval.
+The architecture separates document processing from querying:
+- **Processing Application**: Handles ingestion, classification, extraction, and loading
+- **Query Application**: Provides pre-built analytics queries as an API
+
+Both applications are deployed as serverless functions and can be called via HTTP or programmatically.
+
+## Quick Start
+
+### Prerequisites
+
+- Python 3.11+
+- [Tensorlake API Key](https://docs.tensorlake.ai/platform/authentication#api-keys)
+- Databricks SQL Warehouse credentials:
+  - Server Hostname
+  - HTTP Path
+  - Access Token
+
+### Databricks Setup
+
+You need access to a Databricks SQL Warehouse. Find your connection details in the Databricks workspace under **SQL Warehouses → Connection Details**.
+
+## Local Testing
+
+### 1. Clone and Install
+
+```bash
+git clone https://github.com/tensorlakeai/databricks
+cd databricks
+pip install --upgrade tensorlake databricks-sql-connector pandas pyarrow
+```
+
+### 2. Set Environment Variables
+
+```bash
+export TENSORLAKE_API_KEY=your_tensorlake_api_key
+export DATABRICKS_SERVER_HOSTNAME=your_hostname
+export DATABRICKS_HTTP_PATH=your_http_path
+export DATABRICKS_ACCESS_TOKEN=your_access_token
+```
+
+> **Tip:** If you encounter SSL certificate issues on macOS or other environments, you can set:
+> ```bash
+> export DATABRICKS_SQL_CONNECTOR_VERIFY_SSL=false
+> ```
+
+### 3. Process a Test Filing
+
+Run the processing script to extract data from a single test SEC filing:
+
+```bash
+python process-sec.py
+```
+
+### 4. Query the Data
+
+Head into the Databricks SQL Editor and query the data using this sample query:
+```sql
+WITH ranked_risks AS (
+    SELECT 
+        company_name,
+        ticker,
+        risk_description,
+        citation,
+        LENGTH(risk_description) as description_length,
+        ROW_NUMBER() OVER (PARTITION BY company_name ORDER BY LENGTH(risk_description) DESC) as rn
+    FROM ai_risks
+    WHERE risk_category = 'Operational'
+)
+SELECT 
+    company_name,
+    ticker,
+    citation,
+    risk_description,
+    description_length
+FROM ranked_risks
+WHERE rn = 1
+ORDER BY company_name
+```
+
+![Databricks SQL Editor showing query results](databricks-query.png)
+
+## Deploying to Tensorlake Cloud
+
+### 1. Verify Tensorlake Connection
+
+```bash
+tensorlake whoami
+```
+
+### 2. Set Secrets
+
+Store your credentials securely in Tensorlake:
+
+```bash
+tensorlake secrets set TENSORLAKE_API_KEY='your_key'
+tensorlake secrets set DATABRICKS_SERVER_HOSTNAME='your_hostname'
+tensorlake secrets set DATABRICKS_HTTP_PATH='your_path'
+tensorlake secrets set DATABRICKS_ACCESS_TOKEN='your_token'
+```
+
+### 3. Verify Secrets
+
+```bash
+tensorlake secrets list
+```
+
+### 4. Deploy Applications
+
+Deploy the processing application:
+
+```bash
+tensorlake deploy process-sec.py
+```
+
+Once your applications have been deployed, you should be able to see them in your Applications on [cloud.tensorlake.ai](https://cloud.tensorlake.ai):
+
+![A screenshot of the Tensorlake dashboard showing the deployed application document_ingestion](deployed-applications.png)
+
+### 5. Run the Full Pipeline
+
+Process all SEC filings using the deployed application:
+
+```bash
+python process-sec-remote.py
+```
 
 ## Quick Overview: Tensorlake Applications
 
@@ -70,95 +199,15 @@ The integration between Tensorlake and Databricks provides several key benefits:
 5. **Databricks Integration**: Leverage Databricks' powerful analytics capabilities, Unity Catalog, and Delta Lake with properly structured data.
 6. **Production Ready**: Built-in error handling, retries, and observability for enterprise workloads.
 
-## Architecture
-
-```
-Document URLs → Tensorlake Application → Page Classification (VLM)
-                                      → Structured Extraction (LLM)
-                                      → Databricks SQL Warehouse
-                                      → SQL Analytics & Dashboards
-```
-
-The architecture separates document processing from querying:
-- **Processing Application**: Handles ingestion, classification, extraction, and loading
-- **Query Application**: Provides pre-built analytics queries as an API
-
-Both applications are deployed as serverless functions and can be called via HTTP or programmatically.
-
-## Getting Started
-
-### Prerequisites
-- Python 3.11+
-- [Tensorlake API Key](https://docs.tensorlake.ai/platform/authentication#api-keys)
-- Databricks SQL Warehouse credentials (Server Hostname, HTTP Path, Access Token)
-
-### Quick Start
-
-1. **Clone this repository**
-   ```bash
-   git clone https://github.com/tensorlakeai/databricks
-   cd databricks/sec-filings
-   ```
-
-2. **Install dependencies**
-   ```bash
-   pip install --upgrade tensorlake databricks-sql-connector pandas pyarrow
-   ```
-
-3. **Set environment variables**
-   ```bash
-   export TENSORLAKE_API_KEY=your_tensorlake_api_key
-   export DATABRICKS_SERVER_HOSTNAME=your_hostname
-   export DATABRICKS_HTTP_PATH=your_http_path
-   export DATABRICKS_ACCESS_TOKEN=your_access_token
-   ```
-
-4. **Test locally**
-   ```bash
-   python process-sec.py  # Process a test document
-   python query-sec.py 0  # Run a query
-   ```
-
-5. **Deploy to Tensorlake Cloud**
-   ```bash
-   # Set secrets
-   tensorlake secrets set TENSORLAKE_API_KEY='your_key'
-   tensorlake secrets set DATABRICKS_SERVER_HOSTNAME='your_hostname'
-   tensorlake secrets set DATABRICKS_HTTP_PATH='your_path'
-   tensorlake secrets set DATABRICKS_ACCESS_TOKEN='your_token'
-   
-   # Deploy applications
-   tensorlake deploy process-sec.py
-   tensorlake deploy query-sec.py
-   ```
-
-6. **Run the full pipeline**
-   ```bash
-   python process-sec-remote.py  # Process all SEC filings
-   python query-sec-remote.py 2  # Query emerging risks
-   ```
-
-## Example Queries
-
-The query application provides 6 pre-built analytics queries:
-
-| Query # | Name | Description |
-|---------|------|-------------|
-| 0 | Risk Distribution | Count risk mentions by category across all companies |
-| 1 | Operational Risks | Most detailed operational risk per company |
-| 2 | Risk Evolution | All AI risks mentioned in 2025 filings |
-| 3 | Risk Timeline | Trends in risk mentions over time |
-| 4 | Risk Profiles | Risk category frequency by company |
-| 5 | Company Summary | Filing statistics and risk patterns per company |
-
 ## Project Structure
 
 ```
-sec-filings/
-├── process-sec.py           # Main processing application (local)
-├── query-sec.py             # Query application (local)
+databricks/
+├── process-sec.py           # Main processing application
 ├── process-sec-remote.py    # Script to call deployed process app
-├── query-sec-remote.py      # Script to call deployed query app
+├── databricks-query.png     # Screenshot of Databricks SQL query
+├── deployed-applications.png # Screenshot of Tensorlake dashboard
+├── LICENSE                  # MIT License
 └── README.md                # This file
 ```
 
